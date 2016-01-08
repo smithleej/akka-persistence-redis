@@ -76,8 +76,8 @@ class RedisSnapshotStore extends SnapshotStore with ActorLogging with DefaultRed
    *
    * @param metadata snapshot metadata.
    */
-  def delete(metadata : SnapshotMetadata): Unit = {
-    redis.zremrangebyscore(snapshotKey(metadata.persistenceId), Limit(metadata.sequenceNr), Limit(metadata.sequenceNr))
+  def deleteAsync(metadata : SnapshotMetadata): Future[Unit] = {
+    redis.zremrangebyscore(snapshotKey(metadata.persistenceId), Limit(metadata.sequenceNr), Limit(metadata.sequenceNr)).map(_ => ())
   }
 
   /**
@@ -86,8 +86,8 @@ class RedisSnapshotStore extends SnapshotStore with ActorLogging with DefaultRed
    * @param persistenceId processor id.
    * @param criteria selection criteria for deleting.
    */
-  def delete(persistenceId : String, criteria : SnapshotSelectionCriteria): Unit = {
-    redis.zremrangebyscore(snapshotKey(persistenceId), Limit(-1L), Limit(criteria.maxSequenceNr))
+  def deleteAsync(persistenceId : String, criteria : SnapshotSelectionCriteria): Future[Unit] = {
+    redis.zremrangebyscore(snapshotKey(persistenceId), Limit(-1), Limit(criteria.maxSequenceNr)).map(_ => ())
   }
 }
 

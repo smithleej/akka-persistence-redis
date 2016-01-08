@@ -4,7 +4,7 @@
 This is a plugin for Akka Persistence that uses Redis as backend.
  
 ## Compatibility
-This plugin was developed for Akka 2.3.x and Scala 2.11.x
+This plugin was developed for Akka 2.4.x and Scala 2.11.x
 It uses [rediscala](https://github.com/etaty/rediscala), an asynchronous Redis client written with Akka and Scala.
 Deprecated methods since Akka 2.3.4 are NOT implemented. As a result, some tests in [TCK](http://doc.akka.io/docs/akka/snapshot/scala/persistence.html#Plugin_TCK) fail.
 Rest of methods are tested with the test harness included in this project.  

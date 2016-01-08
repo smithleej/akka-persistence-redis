@@ -7,13 +7,7 @@ import redis.RedisClient
 /**
  * Akka Persistence Snapshot TCK tests provided by Akka
  */
-class RedisSnapshotSpec extends SnapshotStoreSpec {
-
-  override lazy val config = ConfigFactory.parseString(
-    """
-      |akka.persistence.snapshot-store.plugin = "akka-persistence-redis.snapshot"
-      |akka-persistence-redis.snapshot.class = "com.hootsuite.akka.persistence.redis.snapshot.RedisSnapshotStore"
-    """.stripMargin)
+class RedisSnapshotSpec extends SnapshotStoreSpec(RedisSnapshotSpec.Config) {
 
   override def beforeAll() = {
     super.beforeAll()
@@ -27,3 +21,11 @@ class RedisSnapshotSpec extends SnapshotStoreSpec {
   }
 }
 
+object RedisSnapshotSpec {
+
+  val Config = ConfigFactory.parseString(
+    """
+      |akka.persistence.snapshot-store.plugin = "akka-persistence-redis.snapshot"
+      |akka-persistence-redis.snapshot.class = "com.hootsuite.akka.persistence.redis.snapshot.RedisSnapshotStore"
+    """.stripMargin)
+}

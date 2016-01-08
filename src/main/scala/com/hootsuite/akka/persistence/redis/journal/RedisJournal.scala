@@ -2,20 +2,19 @@ package com.hootsuite.akka.persistence.redis.journal
 
 import akka.actor.ActorLogging
 import akka.persistence._
-import akka.persistence.journal.SyncWriteJournal
+import akka.persistence.journal.AsyncWriteJournal
 import com.hootsuite.akka.persistence.redis.{ByteArraySerializer, DefaultRedisComponent}
 import redis.api.Limit
 
 import scala.collection.immutable.Seq
-import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.util.{Failure, Success}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Try, Failure, Success}
 
 /**
  * Writes journals in Sorted Set, using SequenceNr as score.
  * Deprecated API's are not implemented which causes few TCK tests to fail.
  */
-class RedisJournal extends SyncWriteJournal with ActorLogging with DefaultRedisComponent with ByteArraySerializer with JournalExecutionContext {
+class RedisJournal extends AsyncWriteJournal with ActorLogging with DefaultRedisComponent with ByteArraySerializer with JournalExecutionContext {
 
   /**
    * Define actor system for Rediscala and ByteArraySerializer
@@ -30,70 +29,32 @@ class RedisJournal extends SyncWriteJournal with ActorLogging with DefaultRedisC
    * The batch write must be atomic i.e. either all persistent messages in the batch
    * are written or none.
    */
-  def writeMessages(messages: Seq[PersistentRepr]): Unit = {
+  def asyncWriteMessages(messages: Seq[AtomicWrite]): Future[Seq[Try[Unit]]] = {
 
-    import Journal._
+      val transaction = redis.transaction()
 
-    val transaction = redis.transaction()
-
-    messages.map { pr =>
-      toBytes(pr) match {
-        case Success(serialized) =>
-          val journal = Journal(pr.sequenceNr, serialized, pr.deleted)
-          transaction.zadd(journalKey(pr.persistenceId), (pr.sequenceNr, journal))
-        case Failure(e) => Future.failed(throw new RuntimeException("writeMessages: failed to write PersistentRepr to redis"))
+      val res = messages.map { ar =>
+        ar.payload.foreach { pr =>
+          toBytes(pr) match {
+            case Success(serialized) =>
+              val journal = Journal(pr.sequenceNr, serialized, pr.deleted)
+              transaction.zadd(journalKey(pr.persistenceId), (pr.sequenceNr, journal))
+            case Failure(e) => Future.failed(throw new scala.RuntimeException("writeMessages: failed to write PersistentRepr to redis"))
+          }
+        }
+        Success()
       }
-    }
 
-    Await.result(transaction.exec(), 1 second)
+      transaction.exec().map(_ => res)
   }
-
-  /**
-   * Plugin API: synchronously writes a batch of delivery confirmations to the journal.
-   */
-  @scala.deprecated("writeConfirmations will be removed, since Channels will be removed.", "now")
-  def writeConfirmations(confirmations: Seq[PersistentConfirmation]): Unit = {}
-
-  /**
-   * Plugin API: synchronously deletes messages identified by `messageIds` from the
-   * journal. If `permanent` is set to `false`, the persistent messages are marked as
-   * deleted, otherwise they are permanently deleted.
-   */
-  @scala.deprecated("deleteMessages will be removed.", "now")
-  def deleteMessages(messageIds: Seq[PersistentId],permanent: Boolean): Unit = {}
 
   /**
    * Plugin API: synchronously deletes all persistent messages up to `toSequenceNr`
    * (inclusive). If `permanent` is set to `false`, the persistent messages are marked
    * as deleted, otherwise they are permanently deleted.
    */
-  def deleteMessagesTo(persistenceId: String, toSequenceNr: Long, permanent: Boolean): Unit = {
-
-    import Journal._
-
-    val f = permanent match {
-      case true => redis.zremrangebyscore(journalKey(persistenceId), Limit(-1), Limit(toSequenceNr))
-      case false =>
-        for {
-          journals <- redis.zrangebyscore(journalKey(persistenceId), Limit(-1), Limit(toSequenceNr))
-        } yield {
-          val transaction = redis.transaction()
-          journals.foreach { journal =>
-            val pr = fromBytes[PersistentRepr](journal.persistentRepr).toOption.get
-            val newPr = pr.update(deleted = true)
-            toBytes(newPr) match {
-              case Success(serialized) =>
-                transaction.zremrangebyscore(journalKey(pr.persistenceId), Limit(pr.sequenceNr), Limit(pr.sequenceNr))
-                transaction.zadd(journalKey(newPr.persistenceId), (newPr.sequenceNr, Journal(newPr.sequenceNr, serialized, newPr.deleted)))
-              case Failure(e) => throw new RuntimeException("deleteMessagesTo: failed to deserialize journal entry to delete")
-            }
-          }
-
-          transaction.exec()
-        }
-    }
-
-    Await.result(f, 1 second)
+  def asyncDeleteMessagesTo(persistenceId: String, toSequenceNr: Long): Future[Unit] = {
+    redis.zremrangebyscore(journalKey(persistenceId), Limit(-1), Limit(toSequenceNr)).map(long => ())
   }
 
   /**

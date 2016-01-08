@@ -21,7 +21,7 @@ libraryDependencies ++= Seq(
 
 // Test dependencies
 libraryDependencies ++= Seq(
-  "com.typesafe.akka"    %% "akka-persistence-tck-experimental" % Version.akka % "test"
+  "com.typesafe.akka"    %% "akka-persistence-tck" % Version.akka % "test"
 )
 
 Settings.publishSettings
